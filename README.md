@@ -11,3 +11,10 @@ docker push hello2pariskhit/helloworld-grpc
 ```
 kubectl apply -f ./kubernetes/grpc-sample.yaml
 ```
+
+
+```
+grpcurl grpc.example.com:443 list 
+grpc.reflection.v1alpha.ServerReflection
+helloworld.helloworld
+```
