@@ -1,3 +1,21 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  creationTimestamp: null
+  labels:
+    run: grpc-netshoot
+  name: grpc-netshoot
+  namespace: grpcserver
+spec:
+  containers:
+  - image: hello2parikshit/grpc-netshoot
+    name: grpc-netshoot
+    args: ["sleep", "infinity"]
+    resources: {}
+  dnsPolicy: ClusterFirst
+  restartPolicy: Always
+status: {}
+
 ---
 apiVersion: v1
 kind: Namespace

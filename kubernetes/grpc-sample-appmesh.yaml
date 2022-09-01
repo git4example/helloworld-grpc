@@ -1,0 +1,340 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: grpcmesh
+  labels:
+    mesh: grpc
+    appmesh.k8s.aws/sidecarInjectorWebhook: enabled
+---
+apiVersion: appmesh.k8s.aws/v1beta2
+kind: Mesh
+metadata:
+  name: grpc
+spec:
+  namespaceSelector:
+    matchLabels:
+      mesh: grpc
+# ------------------ grpc-netshoot -----------------------------------
+---
+apiVersion: v1
+kind: Service
+metadata:
+  creationTimestamp: null
+  labels:
+    app: grpc-netshoot
+  name: grpc-netshoot
+  namespace: grpcmesh
+spec:
+  ports:
+  - port: 80
+    protocol: TCP
+    targetPort: 80
+  selector:
+    app: grpc-netshoot
+status:
+  loadBalancer: {}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  labels:
+    app: grpc-netshoot
+  name: grpc-netshoot
+  namespace: grpcmesh
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grpc-netshoot
+  strategy: {}
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: grpc-netshoot
+    spec:
+      containers:
+      - image: hello2parikshit/grpc-netshoot
+        name: grpc-netshoot
+        args: ["sleep", "infinity"]
+        resources: {}
+status: {}
+---
+apiVersion: appmesh.k8s.aws/v1beta2
+kind: VirtualNode
+metadata:
+  name: grpc-netshoot
+  namespace: grpcmesh
+spec:
+  podSelector:
+    matchLabels:
+      app: grpc-netshoot
+  listeners:
+    - portMapping:
+        port: 80
+        protocol: http
+      healthCheck:
+        protocol: http
+        path: '/'
+        healthyThreshold: 2
+        unhealthyThreshold: 2
+        timeoutMillis: 2000
+        intervalMillis: 5000
+  # backends:
+  #   - virtualService:
+  #       virtualServiceRef:
+  #         name: grpcserver
+  #   - virtualService:
+  #       virtualServiceRef:
+  #         name: httpd
+  serviceDiscovery:
+    dns:
+      hostname: grpc-netshoot.grpcmesh.svc.cluster.local
+# ------------------ grpc-netshoot -----------------------------------
+
+# ------------------- HTTPD ------------------
+---
+apiVersion: v1
+kind: Service
+metadata:
+  creationTimestamp: null
+  labels:
+    app: httpd
+  name: httpd
+  namespace: grpcmesh
+spec:
+  ports:
+  - port: 80
+    protocol: TCP
+    targetPort: 80
+  selector:
+    app: httpd
+status:
+  loadBalancer: {}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  labels:
+    app: httpd
+  name: httpd
+  namespace: grpcmesh
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: httpd
+  strategy: {}
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: httpd
+    spec:
+      containers:
+      - image: httpd
+        name: httpd
+        resources: {}
+status: {}
+---
+apiVersion: appmesh.k8s.aws/v1beta2
+kind: VirtualNode
+metadata:
+  name: httpd
+  namespace: grpcmesh
+spec:
+  podSelector:
+    matchLabels:
+      app: httpd
+  listeners:
+    - portMapping:
+        port: 80
+        protocol: http
+      healthCheck:
+        protocol: http
+        path: '/'
+        healthyThreshold: 2
+        unhealthyThreshold: 2
+        timeoutMillis: 2000
+        intervalMillis: 5000
+  serviceDiscovery:
+    dns:
+      hostname: httpd.grpcmesh.svc.cluster.local
+---
+apiVersion: appmesh.k8s.aws/v1beta2
+kind: VirtualService
+metadata:
+  name: httpd
+  namespace: grpcmesh
+spec:
+  awsName: httpd.grpcmesh.svc.cluster.local
+  provider:
+    virtualRouter:
+      virtualRouterRef:
+        name: httpd-router
+---
+apiVersion: appmesh.k8s.aws/v1beta2
+kind: VirtualRouter
+metadata:
+  name: httpd-router
+  namespace: grpcmesh
+spec:
+  listeners:
+    - portMapping:
+        port: 80
+        protocol: http
+  routes:
+    - name: httpd-route
+      httpRoute:
+        match:
+          prefix: /
+        action:
+          weightedTargets:
+            - virtualNodeRef:
+                name: httpd
+              weight: 100
+
+# ------------------- HTTPD ------------------
+
+# ------------------   grpcserver-----------------------------------
+apiVersion: appmesh.k8s.aws/v1beta2
+kind: VirtualNode
+metadata:
+  name: grpcserver
+  namespace: grpcmesh
+spec:
+  podSelector:
+    matchLabels:
+      app: grpcserver
+  listeners:
+    - portMapping:
+        port: 9000
+        protocol: grpc
+      healthCheck:
+        protocol: http
+        path: '/'
+        healthyThreshold: 2
+        unhealthyThreshold: 2
+        timeoutMillis: 2000
+        intervalMillis: 5000
+  serviceDiscovery:
+    dns:
+      hostname: grpcserver.grpcmesh.svc.cluster.local
+---
+apiVersion: appmesh.k8s.aws/v1beta2
+kind: VirtualService
+metadata:
+  name: grpcserver
+  namespace: grpcmesh
+spec:
+  awsName: grpcserver.grpcmesh.svc.cluster.local
+  provider:
+    virtualRouter:
+      virtualRouterRef:
+        name: grpcserver-router
+---
+apiVersion: appmesh.k8s.aws/v1beta2
+kind: VirtualRouter
+metadata:
+  name: grpcserver-router
+  namespace: grpcmesh
+spec:
+  listeners:
+    - portMapping:
+        port: 9000
+        protocol: http
+  routes:
+    - name: grpcserver-route
+      httpRoute:
+        match:
+          prefix: /
+        action:
+          weightedTargets:
+            - virtualNodeRef:
+                name: grpcserver
+              weight: 100
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grpcserver
+  namespace: grpcmesh
+spec:
+  selector:
+    matchLabels:
+      app: grpcserver
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: grpcserver
+    spec:
+      containers:
+      - name: grpc-demo
+        image: 064250592128.dkr.ecr.ap-southeast-2.amazonaws.com/helloworld-grpc:latest   #<------- change this to te uri to which the docker image was pushed earlier
+        imagePullPolicy: Always
+        ports:
+        - name: grpc-api
+          containerPort: 9000
+        env:
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+      restartPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grpcserver
+  namespace: grpcmesh
+spec:
+  # bypass kube-proxy
+  ports:
+  - port: 9000
+    protocol: TCP
+    targetPort: 9000
+  clusterIP: None
+  selector:
+    app: grpcserver
+---
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    # alb.ingress.kubernetes.io/actions.ssl-redirect: '{"Type": "redirect", "RedirectConfig":{ "Protocol": "HTTPS", "Port": "443", "StatusCode": "HTTP_301"}}'
+    alb.ingress.kubernetes.io/ssl-redirect: '443'
+    alb.ingress.kubernetes.io/backend-protocol-version: GRPC
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS":443}]'
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/subnets: subnet-083514ae2fffeae36,subnet-0646f689090452c99,subnet-01ee78686b6c137e7  # <----- replace this with the Private Subnets within the VPC in which the EKS cluster exists
+    alb.ingress.kubernetes.io/security-groups: sg-0942e6004e1f7507e  # <----- replace this with a security group id within the VPC where the EKS cluster exists. Make sure that this security group is allowed to access
+    alb.ingress.kubernetes.io/healthcheck-path: /                                 #the EKS worker nodes
+    alb.ingress.kubernetes.io/healthcheck-protocol: HTTP
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:ap-southeast-2:064250592128:certificate/941f1106-9ed0-42c1-bc1d-0c4a6c46afc4  #<----- replace this with the ACM certificate ARN for the DNS hostname used
+  labels:
+    app: grpcserver
+    environment: dev
+  name: grpcserver
+  namespace: grpcmesh
+spec:
+  rules:
+  - host: grpc.neyami.xyz # <----- replace this as per your host name for which the SSL certtficate is available in ACM
+    http:
+      paths:
+        - path: /
+          pathType: Prefix
+          backend:
+            service: 
+              name: grpcserver
+              port: 
+                number: 9000
+
+# ------------------   grpcserver-----------------------------------

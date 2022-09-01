@@ -9,6 +9,7 @@ class helloworldClient(object):
     """
 
     def __init__(self):
+        # Change to your grpc server endpoing for testing
         self.host = 'localhost'
         self.server_port = 9000
 
